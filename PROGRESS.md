@@ -1,6 +1,6 @@
 # DevMind verification status
 
-Local checkpoint, 26 November 2026. The React frontend and FastAPI server run locally. External account configuration gates the first authenticated hosted import and Gemini answer.
+Local checkpoint, 26 November 2026. The React frontend and FastAPI server run locally. See the hosted verification update below for the current integration status.
 
 ## Implemented
 
@@ -29,7 +29,15 @@ The machine's bundled Node executable rejected Rollup's native module signature.
 
 ## External blockers and remaining work
 
-1. Fill in the local backend and frontend environment files and apply the migration in a Supabase project. Values are listed in README.md. Keep private values in backend/.env.
-2. Verify real Supabase registration, email confirmation and token validation. Run docs/live-tests.md with two dedicated users. Real Gemini embeddings, hosted vector persistence, answers and semantic relevance are still unverified. Browser tests used isolated services.
+1. Backend and frontend credentials are configured. The hosted migration and vector round trip are verified below.
+2. Verify real Supabase registration, email confirmation and token validation. Run docs/live-tests.md with two dedicated users. The remaining hosted check is a complete authenticated import, cited answer and two-account isolation test. Browser tests used isolated services.
 3. Confirm a private GitHub destination. Review staged content and credentials before any push.
 4. Obtain publication approval, deploy, and verify actual production URLs, service restart behavior and both repositories again. No public deployment has been performed.
+
+## Hosted verification update
+
+On 26 November 2026, the free DevMind Supabase project accepted the reset database password over its TLS session pooler. The production migration ran successfully. A fresh query verified `devmind.repositories` and pgvector 0.8.2. The local frontend returned HTTP 200 and the API reported all required configuration present. A live Gemini SDK request returned a 768-dimensional embedding.
+
+The originally configured generation model returned HTTP 503 for high demand. The legacy Flash-Lite endpoint returned HTTP 404 for new users. On the same public input, gemini-3.5-flash-lite returned an answer citing index.js lines 1–11. DevMind now uses that verified model in the private local environment.
+
+A real Gemini embedding round-tripped through a temporary Supabase pgvector table with 768 dimensions and cosine self-distance 0.0. The full public pypa/sampleproject ingestion, embedding, retrieval and answer pipeline passed against disposable local pgvector storage with 16 real vectors and a source citation at src/sample/simple.py lines 1–2. GitHub exhausted its anonymous quota before the second complete import. DevMind now reports the exact provider reset timestamp when available. Hosted two-user acceptance awaits dedicated test-account approval.

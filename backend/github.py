@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
 import httpx
@@ -176,6 +177,14 @@ class _API:
                 ) as r:
                     status = r.status_code
                     if status in {403, 429}:
+                        reset = r.headers.get("x-ratelimit-reset", "")
+                        if r.headers.get("x-ratelimit-remaining") == "0" and re.fullmatch(
+                            r"[0-9]{1,10}", reset
+                        ):
+                            when = datetime.fromtimestamp(int(reset), UTC)
+                            raise GitHubError(
+                                f"GitHub API rate limit reached. Retry after {when:%Y-%m-%d %H:%M:%S} UTC."
+                            )
                         raise GitHubError(
                             "GitHub denied the request or reached its rate limit. Check token permissions and retry after the limit resets."
                         )

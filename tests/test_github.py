@@ -50,9 +50,7 @@ def handler(entries, *, visibility="public", status=200, source=SOURCE, requests
         part = request.url.path.removeprefix(base)
         if part == "/commits":
             assert request.url.params["sha"] == "release/main"
-            return httpx.Response(
-                200, json=[{"sha": COMMIT, "commit": {"tree": {"sha": TREE}}}]
-            )
+            return httpx.Response(200, json=[{"sha": COMMIT, "commit": {"tree": {"sha": TREE}}}])
         if part == f"/git/blobs/{BLOB}":
             return httpx.Response(200, content=source)
         return httpx.Response(
@@ -69,9 +67,7 @@ def handler(entries, *, visibility="public", status=200, source=SOURCE, requests
 
 class GitHubTests(unittest.IsolatedAsyncioTestCase):
     def test_normalization_and_rejection(self):
-        self.assertEqual(
-            normalize_url(" https://GitHub.com/Owner/Repo.git/ "), ("owner", "repo")
-        )
+        self.assertEqual(normalize_url(" https://GitHub.com/Owner/Repo.git/ "), ("owner", "repo"))
         for url in [
             URL + "/tree/main",
             URL + "?x=1",
@@ -121,9 +117,7 @@ class GitHubTests(unittest.IsolatedAsyncioTestCase):
         async def report(stage, done, total):
             progress.append((stage, done, total))
 
-        data = await ingest(
-            URL, transport=handler(items), max_files=2, on_progress=report
-        )
+        data = await ingest(URL, transport=handler(items), max_files=2, on_progress=report)
         self.assertEqual(data["metadata"]["sha"], COMMIT)
         self.assertEqual([f["path"] for f in data["files"]], ["README.md", "a.py"])
         self.assertEqual(data["files"][1]["source"], SOURCE)
@@ -140,30 +134,30 @@ class GitHubTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response["skipped"][0]["reason"], "repository byte limit")
         for content in [b"\x00", b"\xff"]:
-            response = await ingest(
-                URL, transport=handler([entry("a.py")], source=content)
-            )
-            self.assertEqual(
-                response["skipped"][0]["reason"], "binary or non-UTF-8 content"
-            )
+            response = await ingest(URL, transport=handler([entry("a.py")], source=content))
+            self.assertEqual(response["skipped"][0]["reason"], "binary or non-UTF-8 content")
         with self.assertRaisesRegex(GitHubError, "byte limit"):
             await ingest(URL, transport=handler([entry("a.py", size=1)]))
 
     async def test_private_repo_stops_before_content(self):
         paths = []
         with self.assertRaisesRegex(GitHubError, "public"):
-            await ingest(
-                URL, transport=handler([], visibility="private", requests=paths)
-            )
+            await ingest(URL, transport=handler([], visibility="private", requests=paths))
         self.assertEqual(len(paths), 1)
 
     async def test_unchanged_revision_has_no_blob_requests(self):
         paths = []
-        data = await ingest(
-            URL, known_sha=COMMIT, transport=handler([], requests=paths)
-        )
+        data = await ingest(URL, known_sha=COMMIT, transport=handler([], requests=paths))
         self.assertTrue(data["unchanged"])
         self.assertFalse(any("/git/" in p for p in paths))
+
+    async def test_exhausted_quota_displays_provider_reset_time(self):
+        response = httpx.Response(
+            403, headers={"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1795712630"}
+        )
+        transport = httpx.MockTransport(lambda request: response)
+        with self.assertRaisesRegex(GitHubError, "2026-11-26 17:03:50 UTC"):
+            await ingest(URL, transport=transport)
 
     async def test_github_errors(self):
         for status, message in [
@@ -179,9 +173,7 @@ class GitHubTests(unittest.IsolatedAsyncioTestCase):
                 await ingest(URL, transport=handler([], status=status))
 
 
-@unittest.skipUnless(
-    os.getenv("DEVMIND_LIVE_GITHUB") == "1", "Opt-in live GitHub reads"
-)
+@unittest.skipUnless(os.getenv("DEVMIND_LIVE_GITHUB") == "1", "Opt-in live GitHub reads")
 class LiveGitHubTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_python_and_javascript(self):
         for slug, expected in [
@@ -206,9 +198,7 @@ class LiveGitHubTests(unittest.IsolatedAsyncioTestCase):
                     symbols += len(parsed["symbols"])
                     for piece in pieces:
                         self.assertGreaterEqual(piece["start_line"], 1)
-                        self.assertLessEqual(
-                            piece["end_line"], len(file["source"].splitlines())
-                        )
+                        self.assertLessEqual(piece["end_line"], len(file["source"].splitlines()))
                 self.assertGreater(count, 0)
                 print(
                     slug,
