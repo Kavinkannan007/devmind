@@ -1,0 +1,11 @@
+{
+  "name": "devmind-database-verification",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node verify.mjs"},
+  "dependencies": {
+    "@electric-sql/pglite": "0.6.0",
+    "@electric-sql/pglite-pgvector": "0.1.0",
+    "@electric-sql/pglite-socket": "0.3.0"
+  }
+}
