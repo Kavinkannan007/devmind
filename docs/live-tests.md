@@ -47,3 +47,15 @@ The suite imports `pypa/sampleproject` and `sindresorhus/escape-string-regexp`, 
 The test leaves both repositories in the owner's workspace for browser inspection. Sign in as the owner, open the saved conversation, click a citation and verify the Monaco tab and highlighted lines match the stored path and range. Refresh the browser and check the saved conversation and document. Sign in as the second user and verify the owner's workspace URL cannot be opened. Remove the two test repositories in Settings or use a fresh owner account for the next run.
 
 The GitHub-only test can run independently of Supabase and Gemini. Its success verifies ingestion through chunking. A full authenticated acceptance result requires the separate live suite and browser checks above.
+
+## Authenticated browser regression
+
+The browser regression creates a temporary production build and serves it on loopback port 4186. Only this isolated test intercepts authentication and API responses. It verifies navigation, persisted history after reload, file-scoped follow-up questions, exact Monaco citation highlighting, documentation export, refresh polling and mobile overflow. Its results are independent of the live provider test.
+
+```sh
+pnpm --dir tests/browser install
+pnpm --dir tests/browser exec playwright install chromium
+node tests/browser/workspace.cjs
+```
+
+If Chrome is already installed, set `CHROME_BIN` to its executable and skip the browser download. The frontend dependencies must already be installed.
