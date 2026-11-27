@@ -129,21 +129,32 @@ async def index(job):
             ):
                 cache[row["content_hash"]] = row["vector"]
     async with provider() as ai:
+        quota_retries = 2
         for start in range(0, len(pieces), 32):
             batch = pieces[start : start + 32]
             missing = {
                 c["content_hash"]: c["text"] for c in batch if c["content_hash"] not in cache
             }
             if missing:
+                while True:
+                    try:
+                        vectors = await embeddings(ai, list(missing.values()))
+                        break
+                    except APIError as exc:
+                        if exc.code != 429 or quota_retries == 0:
+                            raise
+                        quota_retries -= 1
+                        await progress("Waiting for Gemini quota", start, len(pieces))
+                        await asyncio.sleep(65)
                 cache.update(
                     zip(
                         missing,
-                        await embeddings(ai, list(missing.values())),
+                        vectors,
                         strict=True,
                     )
                 )
             await progress("Generating embeddings", start + len(batch), len(pieces))
-    await progress("Saving indexed data")
+    await progress("Saving indexed data", len(pieces), len(pieces))
     async with database() as db:
         await db.execute("delete from files where repo_id=%s", (rid,))
         async with db.cursor() as cur:

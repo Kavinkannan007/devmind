@@ -97,7 +97,9 @@ async def test_two_users_index_retrieve_chat_and_quota(monkeypatch):
             await indexer.index(jobs[0])
             workspace = await client.get(base)
             assert workspace.status_code == 200, workspace.text
-            assert workspace.json()["job"]["status"] == "ready"
+            job = workspace.json()["job"]
+            assert job["status"] == "ready"
+            assert job["done"] == job["total"] > 0
             assert (await client.get(base + "/file", params={"path": "labels.py"})).json()[
                 "text"
             ] == source
