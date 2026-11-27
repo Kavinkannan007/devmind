@@ -1,7 +1,10 @@
 """Importer regression tests and opt-in public GitHub acceptance checks."""
 
+import hashlib
+import io
 import os
 import unittest
+import zipfile
 
 import httpx
 
@@ -41,6 +44,9 @@ def handler(entries, *, visibility="public", status=200, source=SOURCE, requests
     }
 
     def receive(request):
+        if request.url.host == "codeload.github.com":
+            assert "Authorization" not in request.headers
+            return httpx.Response(404)
         assert request.url.host == "api.github.com"
         assert request.method == "GET"
         if requests is not None:
@@ -150,6 +156,27 @@ class GitHubTests(unittest.IsolatedAsyncioTestCase):
         data = await ingest(URL, known_sha=COMMIT, transport=handler([], requests=paths))
         self.assertTrue(data["unchanged"])
         self.assertFalse(any("/git/" in p for p in paths))
+
+    async def test_commit_archive_avoids_blob_requests(self):
+        payload = SOURCE.encode()
+        digest = hashlib.sha1(f"blob {len(payload)}\0".encode() + payload).hexdigest()
+        archive_data = io.BytesIO()
+        with zipfile.ZipFile(archive_data, "w") as archive:
+            archive.writestr(f"project-{COMMIT}/app.py", payload)
+        api = handler([entry("app.py", sha=digest)])
+        paths = []
+
+        def receive(request):
+            paths.append(request.url.path)
+            if request.url.host == "codeload.github.com":
+                self.assertEqual(request.url.path, f"/example/project/zip/{COMMIT}")
+                self.assertNotIn("authorization", request.headers)
+                return httpx.Response(200, content=archive_data.getvalue())
+            return api.handle_request(request)
+
+        result = await ingest(URL, token="test", transport=httpx.MockTransport(receive))
+        self.assertEqual(result["files"][0]["source"], SOURCE)
+        self.assertFalse(any("/git/blobs/" in path for path in paths))
 
     async def test_exhausted_quota_displays_provider_reset_time(self):
         response = httpx.Response(

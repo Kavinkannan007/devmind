@@ -1,8 +1,11 @@
 """Fetch public, immutable GitHub blobs into memory. No checkout or code execution."""
 
 import asyncio
+import hashlib
+import io
 import json
 import re
+import zipfile
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -226,6 +229,44 @@ def _sha(value: str) -> str:
     return value
 
 
+async def _archive_blobs(owner, name, sha, candidates, transport):
+    """Read selected blobs from a bounded public archive without extracting files."""
+    cap = 12 * 1024 * 1024
+    archive_url = f"https://codeload.github.com/{owner}/{name}/zip/{sha}"
+    data = bytearray()
+    try:
+        async with (
+            httpx.AsyncClient(timeout=20, follow_redirects=False, transport=transport) as client,
+            client.stream("GET", archive_url) as response,
+        ):
+            if response.status_code != 200:
+                return {}
+            async for block in response.aiter_bytes(chunk_size=65536):
+                if len(data) + len(block) > cap:
+                    return {}
+                data.extend(block)
+        blobs = {}
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = {}
+            for info in archive.infolist():
+                root, _, path = info.filename.partition("/")
+                if root.endswith("-" + sha) and path:
+                    members[path] = info
+            for entry in candidates:
+                path, size = entry["path"], entry["size"]
+                member = members.get(path)
+                if member is None or member.file_size != size:
+                    continue
+                with archive.open(member) as source:
+                    raw = source.read(size + 1)
+                digest = hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()
+                if len(raw) == size and digest == entry["sha"]:
+                    blobs[path] = raw
+        return blobs
+    except (httpx.HTTPError, zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError):
+        return {}
+
+
 async def ingest(
     url: str,
     *,
@@ -320,15 +361,16 @@ async def ingest(
                 candidates.append(entry)
                 budget += entry["size"]
             await progress("Downloading source files", 0, len(candidates))
+            archived = (
+                await _archive_blobs(owner, name, sha, candidates, transport) if candidates else {}
+            )
             indexed_bytes = 0
             for pos, entry in enumerate(candidates, start=1):
                 path = entry["path"]
                 blob_id = _sha(entry["sha"])
-                raw = await api.read(
-                    f"/git/blobs/{blob_id}",
-                    raw=True,
-                    limit=min(max_file_bytes, entry["size"]),
-                )
+                raw = archived.get(path)
+                if raw is None:
+                    raw = await api.read(f"/git/blobs/{blob_id}", raw=True, limit=entry["size"])
                 try:
                     source = raw.decode("utf-8")
                 except UnicodeDecodeError:
